@@ -1,9 +1,9 @@
-from venv import create
 import pandas as pd
 import boto3
 import json
 import configparser
 import logging
+import time
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -79,19 +79,93 @@ def create_iam_role(iam):
     except Exception as e:
         print(e)
 
-def attach_policy(iam, dwh_role):
-    print('Attaching Policy to IAM Role')
+def attach_policy(iam):
+    logging.info('Attaching Policy to IAM Role')
 
     response = iam.attach_role_policy(
         RoleName=dwh_iam_role_name,
         PolicyArn='arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
     )['ResponseMetadata']['HTTPStatusCode']
-    logging.info(f'Response: {response}')
+    logging.info(f'=== IAM ROLE ===\nResponse: {response}')
+    assert(response == 200), f'The HTTP status code is {response}'
+
+def create_cluster(redshift, role_arn):
+    logging.info('Creating Redshift Cluster')
+    try:
+        response = redshift.create_cluster(        
+            #HW
+            ClusterType=dwh_cluster_type,
+            NodeType=dwh_node_type,
+            NumberOfNodes=int(dwh_num_nodes),
+
+            #Identifiers & Credentials
+            DBName=dwh_db,
+            ClusterIdentifier=dwh_cluster_identifier,
+            MasterUsername=dwh_db_user,
+            MasterUserPassword=dwh_db_password,
+            
+            #Roles (for s3 access)
+            IamRoles=[role_arn]  
+        )
+    except Exception as e:
+        print(e)
+
+def pretty_redshift_props(props):
+    pd.set_option('display.max_colwidth', -1)
+    keysToShow = ["ClusterIdentifier", "NodeType", "ClusterStatus", "MasterUsername", "DBName", "Endpoint", "NumberOfNodes", 'VpcId']
+    x = [(k, v) for k,v in props.items() if k in keysToShow]
+    return pd.DataFrame(data=x, columns=["Key", "Value"])
+
+def update_config_file(parameter_to_replace, value):
+    config_file = 'dwh.cfg'
+
+    with open(config_file, 'r') as file:
+        data = file.readlines():
+    
+    for i, line in enumerate(data):
+        if line.strip().startswith(parameter_to_replace):
+            data[i] = f'{parameter_to_replace} = {value}\n'
+    
+    with open(config_file, 'w') as file:
+        file.writelines(data)
+
+def open_tcp_port(ec2, cluster_props):
+    try:
+        vpc = ec2.Vpc(id=cluster_props['VpcId'])
+        default_security_group = list(vpc.security_groups.all())[0]
+        print(default_security_group)
+        default_security_group.authorize_ingress(
+            GroupName=default_security_group.group_name,
+            CidrIp='0.0.0.0/0',
+            IpProtocol='TCP',
+            FromPort=int(dwh_port),
+            ToPort=int(dwh_port)
+        )
+    except Exception as e:
+        print(e)
 
 def main():
     ec2, s3, iam, redshift = create_resources()
     dwh_role = create_iam_role(iam)
-    attach_policy(iam, dwh_role)
+    attach_policy(iam)
+    role_arn = iam.get_role(RoleName=dwh_iam_role_name)['Role']['Arn']
+    create_cluster(redshift, role_arn)
+    cluster_props = redshift.describe_clusters(ClusterIdentifier=dwh_cluster_identifier)['Clusters'][0]
+    prettified_cluster_props = pretty_redshift_props(cluster_props)
+    print(prettified_cluster_props)
+    
+    while cluster_props['ClusterStatus'] != 'availabel':
+        print(f'Cluster Status: {cluster_props.items()["ClusterStatus"]}')
+        print('Retrying in 5s')
+        time.sleep(5)
+    # Só executar linhas abaixo depois de testar a parte superior
+    dwh_endpoint = cluster_props['Endpoint']['Address']
+    dwh_role_arn = cluster_props['IamRoles'][0]['IamRoleArn']
+    print("DWH_ENDPOINT :: ", dwh_endpoint)
+    print("DWH_ROLE_ARN :: ", dwh_role_arn)
+    update_config_file('DWH_ENDPOINT', dwh_endpoint)
+    update_config_file('DWH_ROLE_ARN', dwh_role_arn)
 
+    open_tcp_port(ec2, cluster_props)
 if __name__ == '__main__':
     main()
