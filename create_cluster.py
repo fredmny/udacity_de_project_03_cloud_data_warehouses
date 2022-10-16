@@ -120,7 +120,7 @@ def update_config_file(parameter_to_replace, value):
     config_file = 'dwh.cfg'
 
     with open(config_file, 'r') as file:
-        data = file.readlines():
+        data = file.readlines()
     
     for i, line in enumerate(data):
         if line.strip().startswith(parameter_to_replace):
@@ -154,11 +154,13 @@ def main():
     prettified_cluster_props = pretty_redshift_props(cluster_props)
     print(prettified_cluster_props)
     
-    while cluster_props['ClusterStatus'] != 'available':
+    cluster_status = cluster_props['ClusterStatus']
+    while cluster_status != 'available':
         print(f'Cluster Status: {cluster_props.items()["ClusterStatus"]}')
         print('Retrying in 5s')
         time.sleep(5)
         cluster_props = redshift.describe_clusters(ClusterIdentifier=dwh_cluster_identifier)['Clusters'][0]
+        cluster_status =cluster_props['ClusterStatus']
     # Só executar linhas abaixo depois de testar a parte superior
     dwh_endpoint = cluster_props['Endpoint']['Address']
     dwh_role_arn = cluster_props['IamRoles'][0]['IamRoleArn']
