@@ -154,10 +154,11 @@ def main():
     prettified_cluster_props = pretty_redshift_props(cluster_props)
     print(prettified_cluster_props)
     
-    while cluster_props['ClusterStatus'] != 'availabel':
+    while cluster_props['ClusterStatus'] != 'available':
         print(f'Cluster Status: {cluster_props.items()["ClusterStatus"]}')
         print('Retrying in 5s')
         time.sleep(5)
+        cluster_props = redshift.describe_clusters(ClusterIdentifier=dwh_cluster_identifier)['Clusters'][0]
     # Só executar linhas abaixo depois de testar a parte superior
     dwh_endpoint = cluster_props['Endpoint']['Address']
     dwh_role_arn = cluster_props['IamRoles'][0]['IamRoleArn']
