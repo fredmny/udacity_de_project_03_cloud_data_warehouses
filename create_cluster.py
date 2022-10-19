@@ -1,3 +1,4 @@
+from cmath import log
 import pandas as pd
 import boto3
 import json
@@ -5,7 +6,7 @@ import configparser
 import logging
 import time
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 config = configparser.ConfigParser()
 config.read('dwh.cfg')
@@ -107,6 +108,8 @@ def create_cluster(redshift, role_arn):
             #Roles (for s3 access)
             IamRoles=[role_arn]  
         )
+        logging.info('Cluster created')
+        logging.info(response)
     except Exception as e:
         print(e)
 
@@ -133,7 +136,7 @@ def open_tcp_port(ec2, cluster_props):
     try:
         vpc = ec2.Vpc(id=cluster_props['VpcId'])
         default_security_group = list(vpc.security_groups.all())[0]
-        print(default_security_group)
+        logging.info(f'Default security group:\n{default_security_group}')
         default_security_group.authorize_ingress(
             GroupName=default_security_group.group_name,
             CidrIp='0.0.0.0/0',
@@ -141,34 +144,41 @@ def open_tcp_port(ec2, cluster_props):
             FromPort=int(dwh_port),
             ToPort=int(dwh_port)
         )
+        logging.info('TCP port opened successfully')
     except Exception as e:
         print(e)
 
 def main():
+    # Instantiate resources
     ec2, s3, iam, redshift = create_resources()
+    # Create IAM role and attach policy
     dwh_role = create_iam_role(iam)
     attach_policy(iam)
     role_arn = iam.get_role(RoleName=dwh_iam_role_name)['Role']['Arn']
+    # Create cluster
     create_cluster(redshift, role_arn)
     cluster_props = redshift.describe_clusters(ClusterIdentifier=dwh_cluster_identifier)['Clusters'][0]
     prettified_cluster_props = pretty_redshift_props(cluster_props)
-    print(prettified_cluster_props)
-    
+    logging.info(prettified_cluster_props)
+    logging.info(cluster_props)
     cluster_status = cluster_props['ClusterStatus']
     while cluster_status != 'available':
-        print(f'Cluster Status: {cluster_props.items()["ClusterStatus"]}')
-        print('Retrying in 5s')
+        logging.info(f'Cluster Status: {cluster_props["ClusterStatus"]}')
+        logging.info('Retrying in 5s')
         time.sleep(5)
         cluster_props = redshift.describe_clusters(ClusterIdentifier=dwh_cluster_identifier)['Clusters'][0]
         cluster_status =cluster_props['ClusterStatus']
-    # Só executar linhas abaixo depois de testar a parte superior
+    logging.info(f'Cluster Status: {cluster_props["ClusterStatus"]}')
+    # Updaate config file
     dwh_endpoint = cluster_props['Endpoint']['Address']
     dwh_role_arn = cluster_props['IamRoles'][0]['IamRoleArn']
-    print("DWH_ENDPOINT :: ", dwh_endpoint)
-    print("DWH_ROLE_ARN :: ", dwh_role_arn)
-    update_config_file('DWH_ENDPOINT', dwh_endpoint)
-    update_config_file('DWH_ROLE_ARN', dwh_role_arn)
-
+    logging.info("DWH_ENDPOINT :: ", dwh_endpoint)
+    logging.info("DWH_ROLE_ARN :: ", dwh_role_arn)
+    update_config_file('HOST', dwh_endpoint)
+    update_config_file('ARN', dwh_role_arn) # IF ERROR WITH THIS PART, TRY PUTTING dwh_role_arn BETWEEN QUOTES
+    logging.info('Config file updated')
+    # Open TCP port
+    logging.info('Opening TCP port')
     open_tcp_port(ec2, cluster_props)
 if __name__ == '__main__':
     main()
