@@ -127,7 +127,7 @@ def update_config_file(parameter_to_replace, value):
     
     for i, line in enumerate(data):
         if line.strip().startswith(parameter_to_replace):
-            data[i] = f'{parameter_to_replace} = {value}\n'
+            data[i] = f'{parameter_to_replace}={value}\n'
     
     with open(config_file, 'w') as file:
         file.writelines(data)

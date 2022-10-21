@@ -53,19 +53,19 @@ staging_songs_table_create = ("""
     status INTEGER NOT NULL,
     ts TIMESTAMP,
     userAgent VARCHAR NOT NULL,
-    userId INTEGER NOT NULL,
+    userId INTEGER NOT NULL
   );
 """)
 
 songplay_table_create = ("""
   CREATE TABLE IF NOT EXISTS songplays
   (
-    songplay_id IDENTITY (1,1) INTEGER NOT NULL,
+    songplay_id INTEGER IDENTITY (1,1) NOT NULL,
     start_time TIMESTAMP NOT NULL,
     user_id INTEGER NOT NULL,
     level VARCHAR(4) NOT NULL,
     song_id VARCHAR(24) NOT NULL,
-    artist_id VARCHA(24) NOT NULL,
+    artist_id VARCHAR(24) NOT NULL,
     session_id INTEGER NOT NULL,
     location VARCHAR NOT NULL,
     user_agent VARCHAR NOT NULL
