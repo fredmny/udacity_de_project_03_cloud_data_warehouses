@@ -15,6 +15,13 @@ dwh_cluster_identifier = config.get("AWS","DWH_CLUSTER_IDENTIFIER")
 dwh_iam_role_name = config.get("AWS", "DWH_IAM_ROLE_NAME")
 
 def create_resources():
+    """Generates AWS resources using the boto3 package
+
+    Returns:
+        Objects to operate AWS resources:
+        - IAM
+        - Redshift
+    """    
     iam = boto3.client(
         'iam',
         region_name='us-west-2',
@@ -32,6 +39,8 @@ def create_resources():
     return iam, redshift
 
 def main():
+    """Delete Redshift cluster, detach role policy and delete role
+    """
     # Create resources
     iam, redshift = create_resources()
     # Delete cluster

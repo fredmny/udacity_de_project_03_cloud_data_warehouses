@@ -28,7 +28,15 @@ dwh_port = config.get("CLUSTER","DB_PORT")
 dwh_iam_role_name = config.get("AWS", "DWH_IAM_ROLE_NAME")
 
 def create_resources():
+    """Generates AWS resources using the boto3 package
 
+    Returns:
+        Objects to operate AWS resources:
+        - EC2
+        - S3
+        - IAM
+        - Redshift
+    """    
     ec2 = boto3.resource(
         'ec2',
         region_name='us-west-2',
@@ -60,6 +68,14 @@ def create_resources():
     return ec2, s3, iam, redshift
 
 def create_iam_role(iam):
+    """Create IAM role
+
+    Args:
+        iam: IAM resource generated through boto3
+
+    Returns:
+        DWH role
+    """    
     logging.info('Creating IAM Role')
     try:
         dwh_role = iam.create_role(
@@ -81,6 +97,11 @@ def create_iam_role(iam):
         print(e)
 
 def attach_policy(iam):
+    """Attach policy to IAM role
+
+    Args:
+        iam: IAM resource generated through boto3
+    """    
     logging.info('Attaching Policy to IAM Role')
 
     response = iam.attach_role_policy(
@@ -91,6 +112,12 @@ def attach_policy(iam):
     assert(response == 200), f'The HTTP status code is {response}'
 
 def create_cluster(redshift, role_arn):
+    """Create Redshift cluster
+
+    Args:
+        redshift: Redshift resource generated through boto3
+        role_arn: ARN of IAM role
+    """
     logging.info('Creating Redshift Cluster')
     try:
         response = redshift.create_cluster(        
@@ -114,12 +141,26 @@ def create_cluster(redshift, role_arn):
         print(e)
 
 def pretty_redshift_props(props):
+    """Prettify Redshift cluster data, using pandas
+
+    Args:
+        props: Redshift cluster data, as returned by the `describe_cluster` parameter
+
+    Returns:
+        Pandas dataframe with prettified cluster data
+    """
     pd.set_option('display.max_colwidth', -1)
     keysToShow = ["ClusterIdentifier", "NodeType", "ClusterStatus", "MasterUsername", "DBName", "Endpoint", "NumberOfNodes", 'VpcId']
     x = [(k, v) for k,v in props.items() if k in keysToShow]
     return pd.DataFrame(data=x, columns=["Key", "Value"])
 
 def update_config_file(parameter_to_replace, value):
+    """Update dwh.cfg configuration file
+
+    Args:
+        parameter_to_replace: The parameter that should be replaced
+        value: The value of the parameter
+    """
     config_file = 'dwh.cfg'
 
     with open(config_file, 'r') as file:
@@ -133,6 +174,12 @@ def update_config_file(parameter_to_replace, value):
         file.writelines(data)
 
 def open_tcp_port(ec2, cluster_props):
+    """Open TCP port on EC2 instance
+
+    Args:
+        ec2: EC2 resource generated through boto3
+        cluster_props: Redshift cluster data, as returned by the `describe_cluster` parameter
+    """
     try:
         vpc = ec2.Vpc(id=cluster_props['VpcId'])
         default_security_group = list(vpc.security_groups.all())[0]
@@ -149,6 +196,8 @@ def open_tcp_port(ec2, cluster_props):
         print(e)
 
 def main():
+    """Create Redshift cluster and all prior steps to be able to do so. Also save dwh endpoint and dwh role arn to config file dwh.cfg
+    """
     # Instantiate resources
     ec2, s3, iam, redshift = create_resources()
     # Create IAM role and attach policy
@@ -180,5 +229,6 @@ def main():
     # Open TCP port
     logging.info('Opening TCP port')
     open_tcp_port(ec2, cluster_props)
+
 if __name__ == '__main__':
     main()
